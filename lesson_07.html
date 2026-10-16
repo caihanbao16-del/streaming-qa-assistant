@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>我的提问页面</title>
+</head>
+
+<body>
+    <h1>我的问答助手</h1>
+
+    <label for="question">请输入问题：</label>
+    <input id="question" type="text" placeholder="例如：什么是 RAG？">
+
+    <label for="question1">补充说明：</label>
+    <input id="question1" type="text" placeholder="例如：用一句话解释">
+
+
+    <button id="send-button" type="button" onclick="sendQuestion()">
+        发送问题
+    </button>
+    <button
+            id="stop-button"
+            type="button"
+            onclick="stopGeneration()"
+            disabled
+    >
+        停止生成
+    </button>
+
+    <p id="output" style="white-space: pre-wrap;">这里将显示模型回答。</p>
+
+    <script>
+        async function sendQuestion() {
+            const question = document.getElementById("question").value.trim();
+            const extra = document.getElementById("question1").value.trim();
+            const output = document.getElementById("output");
+            const button = document.getElementById("send-button");
+            const stopButton = document.getElementById("stop-button");
+
+            if (!question) {
+                output.textContent = "请输入问题，不能只有空格。";
+                return;
+            }
+
+            let fullQuestion = question;
+
+            if (extra) {
+                fullQuestion += "\n补充说明：" + extra;
+            }
+
+            currentController = new AbortController();
+
+            button.disabled = true;
+            stopButton.disabled = false;
+
+            output.textContent = "正在等待模型回答……";
+
+            try {
+                const response = await fetch("/ask-stream", {
+                    method: "POST",
+                    signal: currentController.signal,
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        question: fullQuestion,
+                        top_k: 2
+                    })
+                });
+
+                // 例如请求参数校验失败，后端会返回错误 JSON
+                if (!response.ok) {
+                    const errorResult = await response.json();
+
+                    output.textContent =
+                        "请求失败，状态码：" + response.status +
+                        "\n详情：" + JSON.stringify(errorResult.detail);
+
+                    return;
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+
+                let buffer = "";
+                let receivedText = false;
+                let receivedDone = false;
+
+// 处理 buffer 中已经完整的消息
+                function processMessages() {
+                    const messages = buffer.split("\n\n");
+                    buffer = messages.pop();
+
+                    for (const message of messages) {
+                        let eventName = "";
+                        let dataText = "";
+
+                        // 一条消息内部，再按单个换行分出 event 和 data
+                        for (const line of message.split("\n")) {
+                            if (line.startsWith("event:")) {
+                                eventName = line.slice(6).trim();
+                            } else if (line.startsWith("data:")) {
+                                dataText = line.slice(5).trim();
+                            }
+                        }
+
+                        if (!dataText) continue;
+
+                        const result = JSON.parse(dataText);
+
+                        if (eventName === "answer") {
+                            if (result.text) {
+                                if (!receivedText) {
+                                    output.textContent = "";
+                                    receivedText = true;
+                                }
+
+                                output.textContent += result.text;
+                            }
+
+                        } else if (eventName === "done") {
+                            receivedDone = true;
+                            return;
+
+                        } else if (eventName === "error") {
+                            if (!receivedText) {
+                                output.textContent = "";
+                            }
+
+                            throw new Error(result.message);
+                        }
+                    }
+                }
+
+                try {
+                    while (!receivedDone) {
+                        const { value, done } = await reader.read();
+
+                        if (done) {
+                            buffer += decoder.decode();
+                            processMessages();
+                            break;
+                        }
+
+                        // 先拼接收到的文字，再处理完整消息
+                        buffer += decoder.decode(value, { stream: true });
+                        processMessages();
+                    }
+
+                    if (!receivedDone) {
+                        throw new Error(
+                            "连接已结束，但没有收到完成通知，回答可能不完整。"
+                        );
+                    }
+
+                    if (!receivedText) {
+                        output.textContent = "本次没有收到回答内容，请重试。";
+                    }
+
+                } finally {
+                    // 结束读取；清理失败时，不覆盖前面原本的异常
+                    try {
+                        await reader.cancel();
+                    } catch (cleanupError) {
+                        console.debug("流清理：", cleanupError);
+                    }
+
+                    reader.releaseLock();
+                }
+            } catch (error) {
+                if (error.name === "AbortError") {
+                    // 用户主动停止，和网络故障分开处理
+                    if (output.textContent === "正在等待模型回答……") {
+                        output.textContent = "已停止生成。";
+                    } else {
+                        output.textContent += "\n\n【已停止生成】";
+                    }
+                } else {
+                    output.textContent +=
+                        "\n\n请求或读取失败：" + error.message;
+                }
+
+            } finally {
+                button.disabled = false;
+                stopButton.disabled = true;
+                currentController = null;
+            }
+        }
+        let currentController = null;
+
+        function stopGeneration() {
+            if (currentController) {
+                currentController.abort();
+            }
+        }
+    </script>
+</body>
+</html>
