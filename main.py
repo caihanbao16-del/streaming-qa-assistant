@@ -8,10 +8,17 @@ from pathlib import Path
 from fastapi.responses import FileResponse
 from llm_service import generate_answer_stream
 import json
-from database import get_question_answers, save_question_answer
+from database import get_question_answers, save_question_answer, init_db
+from contextlib import asynccontextmanager
 import sqlite3
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await asyncio.to_thread(init_db)
+    print("[数据库] 初始化完成", flush=True)
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 
 # 定义传入数据的结构和校验规则
