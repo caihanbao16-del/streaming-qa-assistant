@@ -8,6 +8,8 @@ from pathlib import Path
 from fastapi.responses import FileResponse
 from llm_service import generate_answer_stream
 import json
+from database import get_question_answers, save_question_answer
+import sqlite3
 
 app = FastAPI()
 
@@ -38,9 +40,17 @@ async def ask_stream(data: QuestionRequest):
         print("[流式] 开始处理", flush=True)
 
         try:
+            parts = []
             async for text in generate_answer_stream(data.question):
-                # 回答片段：事件名为 answer
+                parts.append(text)
                 yield make_sse("answer", {"text": text})
+
+            full_answer = "".join(parts)
+            if full_answer.strip():
+                await asyncio.to_thread(
+                    save_question_answer, data.question, full_answer
+                )
+                print("[数据库] 回答已保存", flush=True)
 
             print("[流式] 已读完模型数据流", flush=True)
 
@@ -82,6 +92,10 @@ async def ask_stream(data: QuestionRequest):
         except RuntimeError as error:
             print("[流式] 运行配置异常", flush=True)
             yield make_sse("error", {"message": str(error)})
+
+        except sqlite3.Error as error:
+            print("[数据库] 保存失败", type(error).__name__, flush=True)
+            yield make_sse("error", {"message": "回答已生成，但历史记录保存失败。"})
 
         finally:
             print("[流式] answer_parts 进入退出处理", flush=True)
@@ -205,3 +219,15 @@ def stream_page():
 def chat_page():
     html_path = Path(__file__).resolve().parent / "lesson_07.html"
     return FileResponse(html_path)
+
+@app.get("/history")
+def get_history():
+    rows = get_question_answers()
+    records = []
+    for row in rows:
+        records.append({
+            "id": row[0],
+            "question": row[1],
+            "answer": row[2]
+        })
+    return {"records": records}

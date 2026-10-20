@@ -7,6 +7,15 @@
 
 <body>
     <h1>我的流式问答助手</h1>
+    <details>
+        <summary>历史记录（点击展开或收起）</summary>
+
+        <button type="button" onclick="loadHistory()">刷新记录</button>
+
+        <div id="history"
+             style="max-height: 500px; overflow-y: auto;">
+        </div>
+    </details>
 
     <label for="question">请输入问题：</label>
     <input id="question" type="text" placeholder="例如：什么是 RAG？">
@@ -120,6 +129,7 @@
 
                         } else if (eventName === "done") {
                             receivedDone = true;
+                            loadHistory(); // 新增：重新查询并显示历史记录
                             return;
 
                         } else if (eventName === "error") {
@@ -193,6 +203,35 @@
                 currentController.abort();
             }
         }
+        async function loadHistory() {
+            const historyBox = document.getElementById("history");
+            historyBox.style.whiteSpace = "pre-wrap";
+            historyBox.textContent = "正在读取历史记录……";
+
+            try {
+                const response = await fetch("/history");
+
+                if (!response.ok) {
+                    throw new Error("读取失败，状态码：" + response.status);
+                }
+
+                const data = await response.json();
+                historyBox.textContent = "";
+
+                if (data.records.length === 0) {
+                    historyBox.textContent = "暂无历史记录。";
+                    return;
+                }
+
+                for (const record of data.records) {
+                    historyBox.textContent +=
+                        "问题：" + record.question + "\n" +
+                        "回答：" + record.answer + "\n\n";
+                }
+            } catch (error) {
+                historyBox.textContent = "读取历史记录失败：" + error.message;
+            }
+}
     </script>
 </body>
 </html>
