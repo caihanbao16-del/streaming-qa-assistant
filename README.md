@@ -13,14 +13,15 @@
 - 查看最近10条历史记录，最新记录在前。
 - 回答完成后自动刷新历史，支持折叠和区域内滚动。
 - 启动时自动创建所需数据库和表，保留已有记录。
-- 
+- 点击历史记录旁的删除按钮，确认后删除并自动刷新列表。
+
 ## 主要文件
 
 - main.py：定义接口、校验请求参数、组织 SSE 响应。
 - llm_service.py：调用百炼模型接口，读取回答片段。
 - lesson_07.html：提供网页，发送请求并显示回答。
 - .gitignore：设置不纳入 Git 管理的文件。
-- - database.py：初始化数据库、保存问答、查询最近10条记录。
+- database.py：初始化数据库、保存问答、查询最近10条记录。
 
 ## 环境准备
 
@@ -35,7 +36,7 @@ python -m venv .venv
 安装依赖：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install fastapi uvicorn httpx
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 ## 配置百炼 API Key
