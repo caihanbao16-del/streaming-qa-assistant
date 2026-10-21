@@ -11,6 +11,7 @@ import json
 from database import get_question_answers, save_question_answer, init_db
 from contextlib import asynccontextmanager
 import sqlite3
+from database import delete_question_answer
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -238,3 +239,12 @@ def get_history():
             "answer": row[2]
         })
     return {"records": records}
+
+@app.delete("/history/{record_id}")
+def delete_history(record_id: int):
+    deleted_count = delete_question_answer(record_id)
+
+    if deleted_count == 0:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    return {"message": "删除成功"}

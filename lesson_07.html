@@ -224,14 +224,51 @@
                 }
 
                 for (const record of data.records) {
-                    historyBox.textContent +=
-                        "问题：" + record.question + "\n" +
-                        "回答：" + record.answer + "\n\n";
+                    const item = document.createElement("div");
+                    item.style.marginBottom = "16px";
+
+                    const question = document.createElement("span");
+                    question.textContent = "问题：" + record.question;
+
+                    const deleteButton = document.createElement("button");
+                    deleteButton.type = "button";
+                    deleteButton.textContent = "删除";
+                    deleteButton.style.marginLeft = "12px";
+                    deleteButton.onclick = () => deleteHistory(record.id, deleteButton);
+
+                    const answer = document.createElement("div");
+                    answer.textContent = "回答：" + record.answer;
+
+                    item.append(question, deleteButton, answer);
+                    historyBox.append(item);
                 }
             } catch (error) {
                 historyBox.textContent = "读取历史记录失败：" + error.message;
             }
 }
+        async function deleteHistory(recordId, button) {
+            if (!confirm("确定删除这条历史记录吗？")) {
+                return;
+            }
+
+            button.disabled = true;
+
+            try {
+                const response = await fetch("/history/" + recordId, {
+                    method: "DELETE"
+                });
+
+                if (!response.ok) {
+                    throw new Error("删除失败，状态码：" + response.status);
+                }
+
+                await loadHistory();
+            } catch (error) {
+                alert(error.message);
+            } finally {
+                button.disabled = false;
+            }
+        }
     </script>
 </body>
 </html>

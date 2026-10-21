@@ -38,3 +38,26 @@ def get_question_answers():
         return rows
     finally:
         conn.close()
+
+def get_question_answer(record_id):
+    conn = sqlite3.connect(database_path)
+    try:
+        cursor = conn.execute(
+            "SELECT id, question, answer FROM questions WHERE id = ?",
+            (record_id,)
+        )
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+def delete_question_answer(record_id):
+    conn = sqlite3.connect(database_path)
+    try:
+        cursor = conn.execute(
+            "DELETE FROM questions WHERE id = ?",
+            (record_id,)
+        )
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
