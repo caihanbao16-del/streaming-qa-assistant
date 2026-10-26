@@ -6,3 +6,6 @@ __pycache__/
 .env.*
 *.db
 *.db-*
+
+knowledge_docs/
+knowledge_db/

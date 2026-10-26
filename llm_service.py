@@ -37,7 +37,10 @@ async def generate_answer(question):
 
     return result["choices"][0]["message"]["content"]
 
-async def generate_answer_stream(question):
+async def generate_answer_stream(
+        question,
+        system_prompt="请用中文简洁回答用户的问题。"
+):
     api_key = os.getenv("DASHSCOPE_API_KEY")
 
     if not api_key:
@@ -62,7 +65,7 @@ async def generate_answer_stream(question):
                     "messages": [
                         {
                             "role": "system",
-                            "content": "请用中文简洁回答用户的问题。",
+                            "content": system_prompt,
                         },
                         {
                             "role": "user",

@@ -2,11 +2,215 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>我的提问页面</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RIS 学习助手</title>
+
+    <style>
+        /* 宽度计算包含内边距和边框 */
+        * {
+            box-sizing: border-box;
+        }
+
+        /* 整体页面 */
+        body {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 32px 20px;
+            font-family: "Microsoft YaHei", sans-serif;
+            font-size: 15px;
+            line-height: 1.7;
+            color: #1e293b;
+            background: #f1f5f9;
+        }
+
+        h1 {
+            margin: 0 0 24px;
+            font-size: 28px;
+            color: #0f172a;
+        }
+
+        /* 知识库和历史记录面板 */
+        details {
+            margin-bottom: 16px;
+            padding: 16px 20px;
+            border: 1px solid #dbe3ec;
+            border-radius: 12px;
+            background: white;
+        }
+
+        summary {
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* 输入框、下拉框和按钮 */
+        input, select, button {
+            font: inherit;
+        }
+
+        input[type="text"], select {
+            max-width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: white;
+        }
+
+        #question {
+            width: 320px;
+        }
+
+        #question1 {
+            width: 220px;
+        }
+
+        button {
+            margin: 4px 0;
+            padding: 7px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: white;
+            color: #334155;
+            cursor: pointer;
+        }
+
+        button:hover:not(:disabled) {
+            background: #e2e8f0;
+        }
+
+        #send-button, #upload-button {
+            background: #0f766e;
+            border-color: #0f766e;
+            color: white;
+        }
+
+        #send-button:hover, #upload-button:hover {
+            background: #115e59;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        input:focus-visible,
+        select:focus-visible,
+        button:focus-visible,
+        summary:focus-visible {
+            outline: 2px solid #0f766e;
+            outline-offset: 3px;
+        }
+
+        /* 文件列表与回答 */
+        #knowledge-list > div {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+            overflow-wrap: anywhere;
+        }
+
+        #output {
+            min-height: 160px;
+            margin-top: 20px;
+            padding: 24px;
+            border: 1px solid #dbe3ec;
+            border-radius: 12px;
+            background: white;
+            line-height: 1.9;
+            overflow-wrap: anywhere;
+        }
+
+        #history, #upload-status {
+            overflow-wrap: anywhere;
+        }
+
+        /* 小屏幕下让文字输入框独占一行 */
+        @media (max-width: 640px) {
+            body {
+                padding: 20px 12px;
+            }
+
+            #question, #question1 {
+                display: block;
+                width: 100%;
+                margin: 6px 0 12px;
+            }
+
+            #output {
+                padding: 16px;
+            }
+        }
+    </style>
 </head>
 
 <body>
-    <h1>我的流式问答助手</h1>
+<h1>RIS 学习助手</h1>
+<details open style="margin-bottom: 16px;">
+    <summary>知识库资料</summary>
+
+    <p>
+        支持 PDF、UTF-8 编码的 TXT，可一次选择多个文件。
+        每个文件不超过10 MiB。
+    </p>
+
+    <div
+            id="drop-zone"
+            style="
+        border: 2px dashed #94a3b8;
+        border-radius: 12px;
+        padding: 28px;
+        max-width: 520px;
+        text-align: center;
+        background: #f8fafc;
+        margin-bottom: 12px;
+    "
+    >
+        <p style="margin-top: 0;">
+            将 PDF 或 TXT 文件拖到这里
+        </p>
+
+        <p style="color: #64748b;">
+            支持多个文件，也可以点击下方按钮选择
+        </p>
+
+        <input
+                id="knowledge-files"
+                type="file"
+                accept=".pdf,.txt"
+                multiple
+        >
+    </div>
+
+    <button
+            id="upload-button"
+            type="button"
+            onclick="uploadKnowledgeFiles()"
+    >
+        上传并入库
+    </button>
+
+    <div
+            id="upload-status"
+            role="status"
+            style="white-space: pre-wrap; margin-top: 10px;"
+    ></div>
+    <div style="margin-top: 16px;">
+    <button
+        id="refresh-knowledge-button"
+        type="button"
+        onclick="loadKnowledgeDocuments()"
+    >
+        刷新资料列表
+    </button>
+
+    <div
+        id="knowledge-list"
+        role="status"
+        style="margin-top: 10px;"
+    >
+        正在读取资料列表……
+    </div>
+</div>
+</details>
     <details>
         <summary>历史记录（点击展开或收起）</summary>
 
@@ -17,6 +221,18 @@
         </div>
     </details>
 
+<div style="margin-top: 16px; margin-bottom: 12px;">
+    <label for="answer-mode">回答模式：</label>
+
+    <select id="answer-mode">
+        <option value="chat" selected>普通聊天</option>
+        <option value="knowledge">知识库问答</option>
+    </select>
+
+    <span style="margin-left: 8px; color: #64748b;">
+        普通聊天直接提问；知识库问答根据已上传资料回答。
+    </span>
+</div>
     <label for="question">请输入问题：</label>
     <input id="question" type="text" placeholder="例如：什么是 RAG？">
 
@@ -45,6 +261,8 @@
             const output = document.getElementById("output");
             const button = document.getElementById("send-button");
             const stopButton = document.getElementById("stop-button");
+            const modeSelect = document.getElementById("answer-mode");
+            const mode = modeSelect.value;
 
             if (!question) {
                 output.textContent = "请输入问题，不能只有空格。";
@@ -61,6 +279,7 @@
 
             button.disabled = true;
             stopButton.disabled = false;
+            modeSelect.disabled = true;
 
             output.textContent = "正在等待模型回答……";
 
@@ -73,7 +292,8 @@
                     },
                     body: JSON.stringify({
                         question: fullQuestion,
-                        top_k: 2
+                        mode: mode,
+                        top_k: 3
                     })
                 });
 
@@ -193,6 +413,7 @@
             } finally {
                 button.disabled = false;
                 stopButton.disabled = true;
+                modeSelect.disabled = false;
                 currentController = null;
             }
         }
@@ -267,6 +488,209 @@
                 alert(error.message);
             } finally {
                 button.disabled = false;
+            }
+        }
+        async function uploadKnowledgeFiles() {
+            const fileInput = document.getElementById("knowledge-files");
+            const button = document.getElementById("upload-button");
+            const statusBox = document.getElementById("upload-status");
+
+            const files = Array.from(fileInput.files);
+
+            if (files.length === 0) {
+                statusBox.textContent = "请先选择 PDF 或 TXT 文件。";
+                return;
+            }
+
+            button.disabled = true;
+            fileInput.disabled = true;
+
+            const messages = [];
+            let successCount = 0;
+
+            try {
+                for (const file of files) {
+                    statusBox.textContent = [
+                        ...messages,
+                        `正在处理：${file.name}，请稍候……`
+                    ].join("\n");
+
+                    try {
+                        const formData = new FormData();
+                        formData.append("file", file);
+
+                        const response = await fetch("/knowledge/upload", {
+                            method: "POST",
+                            body: formData
+                        });
+
+                        const result = await response.json();
+
+                        if (!response.ok) {
+                            const detail = typeof result.detail === "string"
+                                ? result.detail
+                                : JSON.stringify(result.detail);
+
+                            throw new Error(
+                                detail || `请求失败，状态码：${response.status}`
+                            );
+                        }
+
+                        successCount += 1;
+
+                        messages.push(
+                            `成功：${file.name}，已入库${result.chunk_count}个切片。`
+                        );
+
+                    } catch (error) {
+                        messages.push(
+                            `失败：${file.name}，${error.message}`
+                        );
+                    }
+                }
+
+                messages.push(
+                    `处理结束：成功${successCount}个，失败${files.length - successCount}个。`
+                );
+
+                statusBox.textContent = messages.join("\n");
+
+                if (successCount === files.length) {
+                    fileInput.value = "";
+                }
+
+            } finally {
+                button.disabled = false;
+                fileInput.disabled = false;
+
+                await loadKnowledgeDocuments();
+            }
+        }
+        const dropZone = document.getElementById("drop-zone");
+        const knowledgeInput = document.getElementById("knowledge-files");
+
+        // 文件拖到区域上方
+        dropZone.addEventListener("dragover", function(event) {
+            event.preventDefault();
+
+            if (knowledgeInput.disabled) return;
+
+            event.dataTransfer.dropEffect = "copy";
+            dropZone.style.background = "#dbeafe";
+        });
+
+        // 文件拖离区域
+        dropZone.addEventListener("dragleave", function() {
+            dropZone.style.background = "#f8fafc";
+        });
+
+        // 松开鼠标，接收文件
+        dropZone.addEventListener("drop", function(event) {
+            event.preventDefault();
+            dropZone.style.background = "#f8fafc";
+
+            if (knowledgeInput.disabled) return;
+
+            const droppedFiles = event.dataTransfer.files;
+
+            if (droppedFiles.length === 0) return;
+
+            knowledgeInput.files = droppedFiles;
+
+            document.getElementById("upload-status").textContent =
+                `已选择${droppedFiles.length}个文件，请点击“上传并入库”。`;
+        });
+        async function loadKnowledgeDocuments() {
+            const listBox = document.getElementById("knowledge-list");
+            const button = document.getElementById("refresh-knowledge-button");
+
+            button.disabled = true;
+            listBox.textContent = "正在读取资料列表……";
+
+            try {
+                const response = await fetch("/knowledge/documents");
+
+                if (!response.ok) {
+                    throw new Error("读取失败，状态码：" + response.status);
+                }
+
+                const data = await response.json();
+                listBox.textContent = "";
+
+                if (data.records.length === 0) {
+                    listBox.textContent = "知识库暂无资料，请先上传文件。";
+                    return;
+                }
+
+                for (const record of data.records) {
+                    const item = document.createElement("div");
+                    item.style.marginBottom = "8px";
+
+                    const label = document.createElement("span");
+                    label.textContent =
+                        record.source + " — 已入库 " +
+                        record.chunk_count + " 个切片";
+
+                    const deleteButton = document.createElement("button");
+                    deleteButton.type = "button";
+                    deleteButton.textContent = "从知识库删除";
+                    deleteButton.style.marginLeft = "12px";
+
+                    deleteButton.onclick = () => deleteKnowledgeDocument(
+                        record.document_id,
+                        record.source,
+                        deleteButton
+                    );
+
+                    item.append(label, deleteButton);
+                    listBox.append(item);
+                }
+
+            } catch (error) {
+                listBox.textContent = "读取知识库失败：" + error.message;
+
+            } finally {
+                button.disabled = false;
+
+            }
+        }
+
+        // 打开页面时，自动读取一次资料列表
+        loadKnowledgeDocuments();
+        async function deleteKnowledgeDocument(documentId, source, button) {
+            const confirmed = confirm(
+                `确定从知识库删除“${source}”吗？\n` +
+                "它的切片和向量会被删除，后续检索不再使用这份资料。\n" +
+                "磁盘上的原文件和已有问答历史会保留。"
+            );
+
+            if (!confirmed) return;
+
+            button.disabled = true;
+            button.textContent = "正在删除……";
+
+            try {
+                const response = await fetch(
+                    "/knowledge/documents/" + encodeURIComponent(documentId),
+                    { method: "DELETE" }
+                );
+
+                if (!response.ok) {
+                    const result = await response.json();
+
+                    throw new Error(
+                        result.detail || "删除失败，请稍后重试"
+                    );
+                }
+
+                await loadKnowledgeDocuments();
+
+            } catch (error) {
+                alert(error.message);
+
+            } finally {
+                button.disabled = false;
+                button.textContent = "从知识库删除";
             }
         }
     </script>

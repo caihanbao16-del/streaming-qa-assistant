@@ -1,17 +1,30 @@
-from fastapi import FastAPI, HTTPException
-import httpx
-from llm_service import generate_answer
-from pydantic import BaseModel, Field, field_validator
+# Python 标准库
 import asyncio
-from fastapi.responses import StreamingResponse, HTMLResponse
-from pathlib import Path
-from fastapi.responses import FileResponse
-from llm_service import generate_answer_stream
+import hashlib
 import json
-from database import get_question_answers, save_question_answer, init_db
-from contextlib import asynccontextmanager
 import sqlite3
-from database import delete_question_answer
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Literal
+
+# 安装的第三方库
+import httpx
+from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from pydantic import BaseModel, Field, field_validator
+from pypdf.errors import PyPdfError
+
+# 自己项目中的模块
+from database import (
+    delete_question_answer,
+    get_question_answers,
+    init_db,
+    save_question_answer,
+)
+from ingest_documents import ingest_document
+from llm_service import generate_answer, generate_answer_stream
+from rag_service import generate_rag_answer_stream
+from knowledge_store import list_knowledge_documents, delete_knowledge_document
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,9 +36,12 @@ app = FastAPI(lifespan=lifespan)
 
 
 # 定义传入数据的结构和校验规则
-class QuestionRequest(BaseModel):#规定请求体怎么填
+class QuestionRequest(BaseModel):
     question: str
+    mode: Literal["chat", "knowledge"] = "chat"
     top_k: int = Field(default=3, ge=1, le=10, strict=True)
+
+    # 下面已有的 field_validator 等代码保留
 
     @field_validator("question")
     @classmethod
@@ -48,8 +64,17 @@ async def ask_stream(data: QuestionRequest):
         print("[流式] 开始处理", flush=True)
 
         try:
+            if data.mode == "knowledge":
+                answer_stream = generate_rag_answer_stream(
+                    data.question,
+                    data.top_k
+                )
+            else:
+                answer_stream = generate_answer_stream(data.question)
+
             parts = []
-            async for text in generate_answer_stream(data.question):
+
+            async for text in answer_stream:
                 parts.append(text)
                 yield make_sse("answer", {"text": text})
 
@@ -248,3 +273,101 @@ def delete_history(record_id: int):
         raise HTTPException(status_code=404, detail="记录不存在")
 
     return {"message": "删除成功"}
+
+@app.post("/knowledge/upload")
+async def upload_document(file: UploadFile):
+    try:
+        filename = file.filename or ""
+        suffix = Path(filename).suffix.lower()
+
+        if suffix not in {".pdf", ".txt"}:
+            raise HTTPException(
+                status_code=400,
+                detail="目前只支持 PDF 和 TXT 文件"
+            )
+
+        max_size = 10 * 1024 * 1024
+        content = await file.read(max_size + 1)
+
+        if not content:
+            raise HTTPException(
+                status_code=400,
+                detail="不能上传空文件"
+            )
+
+        if len(content) > max_size:
+            raise HTTPException(
+                status_code=413,
+                detail="文件大小不能超过10 MiB"
+            )
+
+        upload_dir = (
+            Path(__file__).resolve().parent
+            / "knowledge_docs"
+            / "uploads"
+        )
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        # 用文件指纹命名，避免同名文件互相覆盖
+        document_id = hashlib.sha256(content).hexdigest()
+        saved_path = upload_dir / f"{document_id}{suffix}"
+
+        await asyncio.to_thread(saved_path.write_bytes, content)
+
+        result = await ingest_document(
+            saved_path,
+            source_name=filename
+        )
+
+        return {
+            "message": "资料已入库",
+            **result
+        }
+
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="TXT文件请保存为UTF-8编码后上传"
+        )
+
+    except (ValueError, PyPdfError):
+        raise HTTPException(
+            status_code=400,
+            detail="文件无法读取或没有可提取文字，请检查文件内容"
+        )
+
+    except httpx.HTTPError:
+        raise HTTPException(
+            status_code=502,
+            detail="向量接口调用失败，导入未完成；已写入的批次会保留"
+        )
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+    finally:
+        await file.close()
+
+@app.get("/knowledge/documents")
+async def get_knowledge_documents():
+    records = await asyncio.to_thread(list_knowledge_documents)
+
+    return {"records": records}
+
+@app.delete("/knowledge/documents/{document_id}")
+async def remove_knowledge_document(document_id: str):
+    deleted_count = await asyncio.to_thread(
+        delete_knowledge_document,
+        document_id
+    )
+
+    if deleted_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="这份资料已不存在，请刷新列表"
+        )
+
+    return {
+        "message": "已从知识库删除",
+        "deleted_count": deleted_count
+    }
